@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Data files
+*.csv
+*.parquet
+*.pkl
+*.joblib
+data/
+datasets/
+
+# AWS
+.aws/
+*.pem
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Model artifacts (large files)
+models/*.joblib
+models/*.pkl
+
+# Environment variables
+.env
+.env.local
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/

@@ -1,0 +1,199 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SageMaker Resources for Bankruptcy Prediction - 97% Accuracy Model'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bankruptcy-prediction
+  
+  Environment:
+    Type: String
+    Default: prod
+  
+  ModelBucket:
+    Type: String
+    Description: S3 bucket for model artifacts
+
+Resources:
+  # SageMaker Execution Role
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-sagemaker-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sagemaker.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ModelBucket}/*'
+                  - !Sub 'arn:aws:s3:::${ModelBucket}'
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*'
+
+  # SageMaker Notebook Instance (for development)
+  NotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      NotebookInstanceName: !Sub '${ProjectName}-notebook-${Environment}'
+      InstanceType: ml.t3.medium
+      RoleArn: !GetAtt SageMakerExecutionRole.Arn
+      DefaultCodeRepository: !Sub 'https://github.com/ishanmishra128/Bankruptcy-Prediction-AWS.git'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # SageMaker Model
+  BankruptcyModel:
+    Type: AWS::SageMaker::Model
+    Properties:
+      ModelName: !Sub '${ProjectName}-model-${Environment}'
+      ExecutionRoleArn: !GetAtt SageMakerExecutionRole.Arn
+      PrimaryContainer:
+        Image: !Sub '683313688378.dkr.ecr.${AWS::Region}.amazonaws.com/sagemaker-xgboost:1.5-1'
+        ModelDataUrl: !Sub 's3://${ModelBucket}/models/model.tar.gz'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Accuracy
+          Value: '97%'
+
+  # SageMaker Endpoint Configuration
+  EndpointConfig:
+    Type: AWS::SageMaker::EndpointConfig
+    Properties:
+      EndpointConfigName: !Sub '${ProjectName}-endpoint-config-${Environment}'
+      ProductionVariants:
+        - VariantName: AllTraffic
+          ModelName: !GetAtt BankruptcyModel.ModelName
+          InitialInstanceCount: 1
+          InstanceType: ml.t2.medium
+          InitialVariantWeight: 1.0
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # SageMaker Endpoint for real-time predictions
+  PredictionEndpoint:
+    Type: AWS::SageMaker::Endpoint
+    Properties:
+      EndpointName: !Sub '${ProjectName}-endpoint-${Environment}'
+      EndpointConfigName: !GetAtt EndpointConfig.EndpointConfigName
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Purpose
+          Value: 'Real-time bankruptcy predictions'
+
+  # Auto Scaling for Endpoint
+  EndpointScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      ServiceNamespace: sagemaker
+      ResourceId: !Sub 'endpoint/${PredictionEndpoint.EndpointName}/variant/AllTraffic'
+      ScalableDimension: sagemaker:variant:DesiredInstanceCount
+      MinCapacity: 1
+      MaxCapacity: 5
+      RoleARN: !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/sagemaker.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_SageMakerEndpoint'
+
+  EndpointScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub '${ProjectName}-endpoint-scaling-policy'
+      ServiceNamespace: sagemaker
+      ResourceId: !Sub 'endpoint/${PredictionEndpoint.EndpointName}/variant/AllTraffic'
+      ScalableDimension: sagemaker:variant:DesiredInstanceCount
+      PolicyType: TargetTrackingScaling
+      TargetTrackingScalingPolicyConfiguration:
+        TargetValue: 1000.0
+        PredefinedMetricSpecification:
+          PredefinedMetricType: SageMakerVariantInvocationsPerInstance
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+  # CloudWatch Alarms
+  ModelLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-model-latency-${Environment}'
+      AlarmDescription: Alert when model latency exceeds 200ms
+      MetricName: ModelLatency
+      Namespace: AWS/SageMaker
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 200
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: EndpointName
+          Value: !GetAtt PredictionEndpoint.EndpointName
+        - Name: VariantName
+          Value: AllTraffic
+
+  Model4XXErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-model-4xx-errors-${Environment}'
+      AlarmDescription: Alert on 4xx errors
+      MetricName: Model4XXErrors
+      Namespace: AWS/SageMaker
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: EndpointName
+          Value: !GetAtt PredictionEndpoint.EndpointName
+        - Name: VariantName
+          Value: AllTraffic
+
+Outputs:
+  SageMakerRoleArn:
+    Description: ARN of SageMaker execution role
+    Value: !GetAtt SageMakerExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-SageMakerRole'
+  
+  NotebookInstanceName:
+    Description: Name of SageMaker notebook instance
+    Value: !GetAtt NotebookInstance.NotebookInstanceName
+    Export:
+      Name: !Sub '${AWS::StackName}-NotebookInstance'
+  
+  EndpointName:
+    Description: Name of SageMaker prediction endpoint
+    Value: !GetAtt PredictionEndpoint.EndpointName
+    Export:
+      Name: !Sub '${AWS::StackName}-EndpointName'
+  
+  EndpointArn:
+    Description: ARN of SageMaker endpoint
+    Value: !Ref PredictionEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-EndpointArn'

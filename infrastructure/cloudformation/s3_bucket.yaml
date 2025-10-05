@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 Data Lake for Bankruptcy Prediction Pipeline'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bankruptcy-prediction
+    Description: Project name for resource naming
+  
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+
+Resources:
+  # S3 Bucket for Data Lake
+  DataLakeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-data-lake-${Environment}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: MoveToInfrequentAccess
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 90
+                StorageClass: STANDARD_IA
+              - TransitionInDays: 180
+                StorageClass: GLACIER
+          - Id: DeleteOldVersions
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 30
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # S3 Bucket Policy
+  DataLakeBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DataLakeBucket
+      PolicyDocument:
+        Statement:
+          - Sid: DenyUnencryptedObjectUploads
+            Effect: Deny
+            Principal: '*'
+            Action: s3:PutObject
+            Resource: !Sub '${DataLakeBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: AES256
+          - Sid: AllowGlueAccess
+            Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub '${DataLakeBucket.Arn}/*'
+
+  # Model Artifacts Bucket
+  ModelArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-models-${Environment}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Logs Bucket
+  LogsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-logs-${Environment}-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireLogs
+            Status: Enabled
+            ExpirationInDays: 90
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # S3 Event Notification to Lambda (placeholder)
+  # This would be configured to trigger Lambda when new data arrives
+  
+Outputs:
+  DataLakeBucketName:
+    Description: Name of the S3 Data Lake bucket
+    Value: !Ref DataLakeBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-DataLakeBucket'
+  
+  DataLakeBucketArn:
+    Description: ARN of the S3 Data Lake bucket
+    Value: !GetAtt DataLakeBucket.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DataLakeBucketArn'
+  
+  ModelArtifactsBucketName:
+    Description: Name of the Model Artifacts bucket
+    Value: !Ref ModelArtifactsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-ModelArtifactsBucket'
+  
+  LogsBucketName:
+    Description: Name of the Logs bucket
+    Value: !Ref LogsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-LogsBucket'

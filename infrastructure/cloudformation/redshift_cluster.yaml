@@ -1,0 +1,194 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Amazon Redshift Cluster for Bankruptcy Analytics - Centralized Data Warehouse'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: bankruptcy-prediction
+  
+  Environment:
+    Type: String
+    Default: prod
+  
+  MasterUsername:
+    Type: String
+    Default: admin
+    NoEcho: false
+  
+  MasterUserPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Master password for Redshift cluster (min 8 characters)
+  
+  DatabaseName:
+    Type: String
+    Default: bankruptcy_db
+
+Resources:
+  # Redshift Subnet Group
+  RedshiftSubnetGroup:
+    Type: AWS::Redshift::ClusterSubnetGroup
+    Properties:
+      Description: Subnet group for Redshift cluster
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Security Group for Redshift
+  RedshiftSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Redshift cluster
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref GlueSecurityGroup
+          Description: Allow Glue access
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          SourceSecurityGroupId: !Ref SageMakerSecurityGroup
+          Description: Allow SageMaker access
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  # Redshift IAM Role
+  RedshiftRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-redshift-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: redshift.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Policies:
+        - PolicyName: RedshiftS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${ProjectName}-data-lake-*'
+                  - !Sub 'arn:aws:s3:::${ProjectName}-data-lake-*/*'
+
+  # Redshift Cluster
+  RedshiftCluster:
+    Type: AWS::Redshift::Cluster
+    Properties:
+      ClusterIdentifier: !Sub '${ProjectName}-cluster-${Environment}'
+      NodeType: dc2.large
+      NumberOfNodes: 2
+      DBName: !Ref DatabaseName
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      ClusterType: multi-node
+      ClusterSubnetGroupName: !Ref RedshiftSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref RedshiftSecurityGroup
+      IamRoles:
+        - !GetAtt RedshiftRole.Arn
+      PubliclyAccessible: false
+      Encrypted: true
+      Port: 5439
+      PreferredMaintenanceWindow: sun:05:00-sun:06:00
+      AutomatedSnapshotRetentionPeriod: 7
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # VPC for Redshift (simplified)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-vpc'
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-private-subnet-1'
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: !Sub '${ProjectName}-private-subnet-2'
+
+  # Security Groups (placeholders)
+  GlueSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Glue
+      VpcId: !Ref VPC
+
+  SageMakerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for SageMaker
+      VpcId: !Ref VPC
+
+  # CloudWatch Alarm for storage usage
+  StorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-redshift-storage-${Environment}'
+      AlarmDescription: Alert when Redshift storage exceeds 80%
+      MetricName: PercentageDiskSpaceUsed
+      Namespace: AWS/Redshift
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: ClusterIdentifier
+          Value: !Ref RedshiftCluster
+
+Outputs:
+  RedshiftClusterEndpoint:
+    Description: Redshift cluster endpoint
+    Value: !GetAtt RedshiftCluster.Endpoint.Address
+    Export:
+      Name: !Sub '${AWS::StackName}-RedshiftEndpoint'
+  
+  RedshiftClusterPort:
+    Description: Redshift cluster port
+    Value: !GetAtt RedshiftCluster.Endpoint.Port
+    Export:
+      Name: !Sub '${AWS::StackName}-RedshiftPort'
+  
+  RedshiftJDBCUrl:
+    Description: JDBC connection string
+    Value: !Sub 'jdbc:redshift://${RedshiftCluster.Endpoint.Address}:${RedshiftCluster.Endpoint.Port}/${DatabaseName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-RedshiftJDBCUrl'
