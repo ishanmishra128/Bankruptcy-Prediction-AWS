@@ -25,7 +25,7 @@ Data Sources → AWS S3 (Data Lake) → AWS Glue (ETL) → AWS Redshift (Data Wa
 | Visualization | **Matplotlib / Pandas** | Perform exploratory analysis and visual reporting |
 
 **Architecture Diagram**
->`architecture_diagram.png` 
+ ![architecture_diagram](architecture_diagram.png)
 
 ---
 
@@ -74,9 +74,11 @@ The goal was to build a **scalable AWS-based data pipeline** to automate ingesti
 ## 📊 Exploratory Data Analysis (EDA)
 
 ### Key Findings:
-- **Liquidity (Working Capital / Total Assets)** and **Profitability (Net Income / Total Assets)** emerged as the strongest bankruptcy indicators.  
+- **Liquidity (Working Capital / Total Assets)** and **Profitability (Net Income / Total Assets)** emerged as the strongest bankruptcy indicators.
+![EDA Plot 1](eda_plot1.png)
 - **Low liquidity + low profitability** corresponded strongly with high bankruptcy risk.  
-- Firms with **high debt loads** were more prone to bankruptcy, though not the sole determinant.  
+- Firms with **high debt loads** were more prone to bankruptcy, though not the sole determinant.
+![EDA Plot 1](eda_plot2.png)
 - Non-bankrupt firms showed higher variability in financial ratios, while bankrupt firms clustered in tighter ranges.
 
 ---
