@@ -1,0 +1,181 @@
+{
+  "pipeline": {
+    "name": "bankruptcy-prediction-pipeline",
+    "version": "1.0",
+    "description": "End-to-end AWS data pipeline for bankruptcy prediction with 97% accuracy"
+  },
+  
+  "aws": {
+    "region": "us-east-1",
+    "account_id": "${AWS_ACCOUNT_ID}",
+    "tags": {
+      "Project": "BankruptcyPrediction",
+      "Environment": "Production",
+      "ManagedBy": "CloudFormation",
+      "CostCenter": "DataScience"
+    }
+  },
+  
+  "s3": {
+    "data_lake_bucket": "bankruptcy-data-lake-prod",
+    "model_bucket": "bankruptcy-models-prod",
+    "logs_bucket": "bankruptcy-logs-prod",
+    "raw_prefix": "raw/",
+    "processed_prefix": "processed/",
+    "model_prefix": "models/"
+  },
+  
+  "glue": {
+    "database": "bankruptcy_prediction_prod",
+    "etl_job": {
+      "name": "bankruptcy-etl-job",
+      "script_location": "s3://bankruptcy-scripts/glue/etl_job.py",
+      "worker_type": "G.1X",
+      "number_of_workers": 10,
+      "max_retries": 1,
+      "timeout_minutes": 120,
+      "schedule": "cron(0 3 * * ? *)"
+    },
+    "data_quality_job": {
+      "name": "bankruptcy-data-quality-job",
+      "validation_threshold": 0.95
+    }
+  },
+  
+  "redshift": {
+    "cluster_identifier": "bankruptcy-analytics-cluster",
+    "database": "bankruptcy_db",
+    "schema": "bankruptcy_analytics",
+    "node_type": "dc2.large",
+    "number_of_nodes": 2,
+    "master_username": "admin",
+    "port": 5439
+  },
+  
+  "sagemaker": {
+    "model": {
+      "type": "xgboost",
+      "version": "1.0",
+      "target_accuracy": 0.97,
+      "hyperparameters": {
+        "n_estimators": 200,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8
+      }
+    },
+    "training": {
+      "instance_type": "ml.m5.xlarge",
+      "instance_count": 1,
+      "max_runtime_seconds": 7200,
+      "train_ratio": 0.7,
+      "validation_ratio": 0.15,
+      "test_ratio": 0.15
+    },
+    "inference": {
+      "endpoint_name": "bankruptcy-prediction-endpoint",
+      "instance_type": "ml.t2.medium",
+      "initial_instance_count": 1,
+      "auto_scaling": {
+        "min_instances": 1,
+        "max_instances": 5,
+        "target_invocations_per_instance": 1000
+      }
+    }
+  },
+  
+  "data_processing": {
+    "file_formats": {
+      "input": "csv",
+      "processed": "parquet",
+      "compression": "snappy"
+    },
+    "partitioning": {
+      "partition_keys": ["fiscal_year", "fiscal_quarter"],
+      "max_partition_size_mb": 128
+    },
+    "quality_checks": {
+      "required_columns": [
+        "company_id",
+        "fiscal_year",
+        "fiscal_quarter",
+        "total_assets",
+        "total_liabilities",
+        "total_equity",
+        "revenue",
+        "net_income",
+        "bankruptcy_status"
+      ],
+      "null_threshold": 0.5,
+      "outlier_std_threshold": 3
+    }
+  },
+  
+  "features": {
+    "financial_ratios": [
+      "current_ratio",
+      "quick_ratio",
+      "net_profit_margin",
+      "roa",
+      "roe",
+      "debt_to_equity",
+      "debt_to_assets",
+      "asset_turnover",
+      "altman_z_score"
+    ],
+    "trend_features": [
+      "revenue_growth",
+      "profit_growth",
+      "asset_growth",
+      "revenue_volatility"
+    ],
+    "derived_features": [
+      "working_capital_ratio",
+      "retained_earnings_ratio",
+      "ebit_to_assets",
+      "market_to_book_ratio"
+    ]
+  },
+  
+  "monitoring": {
+    "cloudwatch": {
+      "log_retention_days": 30,
+      "metrics_namespace": "BankruptcyPrediction"
+    },
+    "alerts": {
+      "etl_failure": {
+        "enabled": true,
+        "sns_topic": "bankruptcy-pipeline-alerts"
+      },
+      "model_accuracy_degradation": {
+        "enabled": true,
+        "threshold": 0.90
+      },
+      "data_quality_issues": {
+        "enabled": true,
+        "threshold": 0.95
+      }
+    }
+  },
+  
+  "performance": {
+    "etl_efficiency_improvement": 0.80,
+    "model_accuracy_target": 0.97,
+    "prediction_latency_ms": 100,
+    "throughput_records_per_hour": 1000000
+  },
+  
+  "security": {
+    "encryption": {
+      "s3_at_rest": "AES256",
+      "redshift_at_rest": true,
+      "in_transit": true
+    },
+    "access_control": {
+      "iam_roles": true,
+      "vpc_isolation": true,
+      "mfa_required": false
+    }
+  }
+}

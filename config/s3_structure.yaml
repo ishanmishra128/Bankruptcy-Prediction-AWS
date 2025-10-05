@@ -1,0 +1,93 @@
+# S3 Data Lake Structure
+# Organized folder hierarchy for raw and processed data
+
+# Root bucket structure
+bankruptcy-data-lake/
+  # Raw data zone - unprocessed financial datasets
+  raw/
+    financial_statements/
+      balance_sheets/
+        year=2020/
+        year=2021/
+        year=2022/
+        year=2023/
+        year=2024/
+      income_statements/
+        year=2020/
+        year=2021/
+        year=2022/
+        year=2023/
+        year=2024/
+      cash_flow_statements/
+        year=2020/
+        year=2021/
+        year=2022/
+        year=2023/
+        year=2024/
+    
+    bankruptcy_records/
+      year=2020/
+      year=2021/
+      year=2022/
+      year=2023/
+      year=2024/
+    
+    market_data/
+      stock_prices/
+      market_indices/
+  
+  # Processed data zone - cleaned and transformed datasets
+  processed/
+    feature_engineered/
+      fiscal_year=2020/
+      fiscal_year=2021/
+      fiscal_year=2022/
+      fiscal_year=2023/
+      fiscal_year=2024/
+    
+    model_ready/
+      train/
+      validation/
+      test/
+    
+    aggregated/
+      industry_benchmarks/
+      quarterly_summaries/
+  
+  # Model artifacts and predictions
+  models/
+    training_artifacts/
+      model_v1.0/
+        model.joblib
+        scaler.joblib
+        feature_names.json
+        metrics.json
+      model_v1.1/
+      model_v2.0/
+    
+    predictions/
+      batch_predictions/
+        date=2024-01-01/
+        date=2024-02-01/
+      real_time_predictions/
+  
+  # Temporary and staging
+  temp/
+    glue_temp/
+    sagemaker_temp/
+  
+  staging/
+    data_validation/
+    quality_checks/
+  
+  # Archive
+  archive/
+    year=2020/
+    year=2021/
+    year=2022/
+
+# Access patterns:
+# - Raw data: s3://bankruptcy-data-lake/raw/{data_type}/year={year}/
+# - Processed data: s3://bankruptcy-data-lake/processed/feature_engineered/fiscal_year={year}/
+# - Model artifacts: s3://bankruptcy-data-lake/models/training_artifacts/model_v{version}/
+# - Predictions: s3://bankruptcy-data-lake/models/predictions/{type}/date={date}/
