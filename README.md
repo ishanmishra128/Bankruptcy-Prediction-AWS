@@ -122,7 +122,6 @@ Model trained and deployed on **AWS SageMaker** with an accuracy of **97%**, lev
 - `architecture_diagram.png` → AWS architecture overview  
 - `glue_etl_script.py` → ETL script for Glue job  
 - `sagemaker_model_training.ipynb` → Notebook for executing the SageMaker Autopilot workflow.
-- `redshift_schema.sql` → SQL schema for data warehouse  
 - `eda_plot1.png`,`eda_plot2.png`  → Key EDA visualizations
 - `MSBA_Financial.pdf`  → Architecture presentation for non-technical stakeholders
 
